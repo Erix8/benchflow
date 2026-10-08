@@ -1,0 +1,32 @@
+# benchmark.yaml — standard BenchFlow benchmark descriptor.
+name: asi-bench
+description: "TODO — one-line description of Asi Bench"
+url: ""
+author: ""
+converted_by: BenchFlow
+
+tasks:
+  count: 0
+  categories: 0
+  tags: []
+
+conversion:
+  script: benchflow.py
+  source_format: TODO          # json | yaml | directories | ...
+  has_oracle_solutions: false
+
+verification:
+  method: TODO                 # llm-as-judge | unit-test | script
+  reward: TODO                 # proportional | binary
+
+parity:
+  structural:
+    tasks_tested: 0
+    passed: 0
+  eval_pipeline:
+    tasks_tested: 0
+    passed: 0
+  side_by_side:
+    criteria_compared: 0
+    agreed: 0
+    agreement_rate: 0.0

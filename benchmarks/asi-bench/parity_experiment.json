@@ -1,0 +1,14 @@
+{
+  "experiment": "side-by-side-parity",
+  "benchmark": "asi-bench",
+  "status": "template",
+  "judge_model": "",
+  "conversion_parity": {
+    "description": "Per-criterion verdicts of original vs converted on identical inputs. Each task lists criteria_results with original_verdict, adapted_verdict, agreement.",
+    "tasks": []
+  },
+  "reward_distribution_parity": {
+    "description": "Legacy vs converted pass-rate / reward deltas at agent scale (the statistical parity layer).",
+    "samples": []
+  }
+}
