@@ -1,25 +1,41 @@
-# benchmark.yaml — standard BenchFlow benchmark descriptor.
+# Standard BenchFlow descriptor for the planned ASI-Bench adapter.
 name: asi-bench
-description: "TODO — one-line description of Asi Bench"
-url: ""
-author: ""
+description: "ASI-Bench scientific-agent tasks converted from pinned public seed31415 material"
+url: https://github.com/apexin-ai/ASI-Bench
+repo: https://github.com/apexin-ai/ASI-Bench
+author: Apexin AI
 converted_by: BenchFlow
+status: scaffold
 
 tasks:
   count: 0
-  categories: 0
-  tags: []
+  count_note: "Not recorded until the pinned converter materializes and validates the supported task set."
+  task_unit: "ASI task × B1-B4 prompt level × seed31415 instance"
+  seed: 31415
+  official: false
+  tags: [asi-bench, scientific-agents, seed31415, local-scoring]
+  excluded:
+    - seed42
+    - llm-vlm-judge
+    - runner-submission-sandbox
+    - network-required-pending-review
 
 conversion:
   script: benchflow.py
-  source_format: TODO          # json | yaml | directories | ...
+  generator: main.py
+  source_format: "Pinned ASI-Bench task bundles plus materialized Hugging Face seed31415 instances"
   has_oracle_solutions: false
+  source_data_committed: false
+  status: not-implemented
 
 verification:
-  method: TODO                 # llm-as-judge | unit-test | script
-  reward: TODO                 # proportional | binary
+  method: "planned deterministic ASI-Bench local scorer in the shared task sandbox"
+  reward: "planned normalized ASI-Bench score in [0, 1]"
+  reference_agent_visible: false
+  status: not-implemented
 
 parity:
+  status: insufficient-evidence
   structural:
     tasks_tested: 0
     passed: 0

@@ -1,5 +1,6 @@
-# BenchFlow job config — how to *run* Asi Bench (separate from benchmark.yaml).
-tasks_dir: benchmarks/asi-bench/tasks
+# BenchFlow job configuration for materialized ASI-Bench seed31415 tasks.
+# This remains inactive until the converter and verifier are implemented.
+tasks_dir: /tmp/asi-bench-tasks
 jobs_dir: jobs/asi-bench
 agent: claude-agent-acp
 model: ""

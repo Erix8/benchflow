@@ -1,14 +1,19 @@
 {
-  "experiment": "side-by-side-parity",
+  "experiment": "asi-bench-side-by-side-parity",
   "benchmark": "asi-bench",
   "status": "template",
-  "judge_model": "",
+  "scope": {
+    "seed": 31415,
+    "official": false,
+    "asi_revision": null,
+    "hf_revision": null
+  },
   "conversion_parity": {
-    "description": "Per-criterion verdicts of original vs converted on identical inputs. Each task lists criteria_results with original_verdict, adapted_verdict, agreement.",
+    "description": "ASI-Bench and converted per-criterion verdicts on identical prediction artifacts.",
     "tasks": []
   },
-  "reward_distribution_parity": {
-    "description": "Legacy vs converted pass-rate / reward deltas at agent scale (the statistical parity layer).",
-    "samples": []
+  "agent_parity": {
+    "description": "ASI-Bench and BenchFlow rewards for identical agent prediction artifacts.",
+    "results": []
   }
 }

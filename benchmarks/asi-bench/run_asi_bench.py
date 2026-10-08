@@ -1,42 +1,50 @@
-"""Run Asi Bench via BenchFlow — converts tasks if needed, then evaluates."""
+"""Reserve the ASI-Bench execution and summary CLI surface.
+
+The adapter is scaffold-only, so this command fails closed until task
+materialization, verification, and ASI-compatible aggregation are implemented.
+"""
 
 from __future__ import annotations
 
-import asyncio
-import importlib.util
+import argparse
 from pathlib import Path
+from typing import NoReturn
 
-_HERE = Path(__file__).resolve().parent
+
+class RunnerNotIntegratedError(RuntimeError):
+    """Raised when a scaffold-only command is invoked."""
 
 
-def _load_converter():
-    spec = importlib.util.spec_from_file_location(
-        "_bf_asi-bench_converter", _HERE / "benchflow.py"
+def run(tasks_dir: Path) -> NoReturn:
+    """Run materialized ASI-Bench tasks once conversion is implemented."""
+    raise RunnerNotIntegratedError(
+        f"ASI-Bench execution is not integrated; cannot run tasks from {tasks_dir}"
     )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
-def ensure_converted_tasks() -> Path:
-    """Convert the source benchmark into BenchFlow tasks under ``tasks/``."""
-    converter = _load_converter()
-    source_dir = _HERE / "source"
-    output_dir = _HERE / "tasks"
-    converter.convert_all(source_dir, output_dir)
-    return output_dir
+def summarize(jobs_dir: Path) -> NoReturn:
+    """Produce ASI-compatible aggregation once result parsing is implemented."""
+    raise RunnerNotIntegratedError(
+        f"ASI-Bench summarization is not integrated; cannot read jobs from {jobs_dir}"
+    )
 
 
-async def main() -> None:
-    from benchflow.evaluation import Evaluation
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run or summarize ASI-Bench")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    tasks_dir = ensure_converted_tasks()
-    job = Evaluation.from_yaml(str(_HERE / "asi-bench.yaml"))
-    job._tasks_dir = tasks_dir  # type: ignore[attr-defined]
-    result = await job.run()
-    print(f"Score: {result.passed}/{result.total} ({result.score:.1%})")
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("--tasks-dir", type=Path, required=True)
+
+    summarize_parser = subparsers.add_parser("summarize")
+    summarize_parser.add_argument("jobs_dir", type=Path)
+
+    args = parser.parse_args()
+    if args.command == "run":
+        run(args.tasks_dir)
+    else:
+        summarize(args.jobs_dir)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

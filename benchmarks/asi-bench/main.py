@@ -1,7 +1,8 @@
-"""Run the Asi Bench converter CLI.
+"""Run the ASI-Bench converter CLI.
 
-Thin delegator so ``python benchmarks/asi-bench/main.py --output-dir ...`` keeps
-working while ``benchflow.py`` stays the single source of truth.
+This remains a thin delegator so ``benchflow.py`` is the single source of truth.
+The converter currently fails closed because this branch contains only the
+integration scaffold.
 """
 
 from __future__ import annotations
