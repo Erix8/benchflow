@@ -209,13 +209,16 @@ def _normalize_reward(
     result: dict[str, Any],
     score_divisor: float,
 ) -> float:
-    """Compute [0,1] reward from ASI scoring result."""
+    """Compute [0,1] reward from ASI scoring result.
+
+    score_divisor scales max_score: effective_max = max_score * score_divisor.
+    For example, ising has score_divisor=1.05 meaning max possible is 105
+    when max_score=100, so reward = final_score / (100 * 1.05).
+    When score_divisor=1.0 (default), effective_max = max_score.
+    """
     final_score = float(result.get("final_score") or 0.0)
     max_score = float(result.get("max_score") or 0.0)
-
-    # score_divisor overrides max_score when set (e.g. ising: 1.05)
-    effective_max = score_divisor if score_divisor != 1.0 else max(max_score, 1.0)
-
+    effective_max = max(max_score, 1.0) * score_divisor
     reward = final_score / effective_max
     return max(0.0, min(1.0, reward))
 
@@ -269,22 +272,26 @@ def _write_reward(reward: float, result: dict, instance: dict, artifact_shas: di
 
 def _write_error(exc: Exception, context: str) -> None:
     """Write asi_error.json (no reward) for infrastructure failures."""
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
     error_doc = {
         "scorer_internal_error": True,
         "error_type": type(exc).__name__,
         "error_context": context,
         "detail": traceback.format_exc(),
     }
-    (LOGS_DIR / "asi_error.json").write_text(
-        json.dumps(error_doc, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    # Explicitly ensure no reward files are present
-    for name in ("reward.txt", "reward.json"):
-        p = LOGS_DIR / name
-        if p.exists():
-            p.unlink()
+    try:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        (LOGS_DIR / "asi_error.json").write_text(
+            json.dumps(error_doc, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        # Explicitly ensure no reward files are present
+        for name in ("reward.txt", "reward.json"):
+            p = LOGS_DIR / name
+            if p.exists():
+                p.unlink()
+    except OSError:
+        # Can't write to /logs (e.g. running outside the sandbox); stderr only.
+        pass
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
