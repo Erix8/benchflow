@@ -127,6 +127,17 @@ def _bootstrap_evaluator(evaluator_dir: Path) -> None:
 
 # ── scoring ──────────────────────────────────────────────────────────────────
 
+def _detail_dict(detail: Any) -> dict[str, Any]:
+    """Convert a ScoreDetail dataclass into a JSON-serializable dict."""
+    import dataclasses
+
+    if dataclasses.is_dataclass(detail) and not isinstance(detail, type):
+        return dataclasses.asdict(detail)
+    if isinstance(detail, dict):
+        return detail
+    return {"value": str(detail)}
+
+
 def _load_instance() -> dict[str, Any]:
     if not INSTANCE_JSON.is_file():
         raise FileNotFoundError(f"instance.json not found at {INSTANCE_JSON}")
@@ -158,9 +169,11 @@ def _run_scoring(
 ) -> dict[str, Any]:
     """Import and call the ASI scoring framework.
 
-    Returns a dict with at minimum:
-      final_score, max_score, hard_gates_passed,
-      gate_results, score_results, scorer_internal_error (bool)
+    Mirrors ``ai4sci_bench.benchflow._score_one`` so BenchFlow rewards stay
+    bit-identical to ``asibench score``.
+
+    Returns a dict with: final_score, max_score, hard_gates_passed,
+    soft_gate_failures, gate_results, score_results, scorer_internal_error.
     """
     import importlib
 
@@ -176,7 +189,6 @@ def _run_scoring(
     evaluation = task_eval.get("evaluation") or {}
 
     # Register scorers
-    scorer_mod = importlib.import_module("ai4sci_bench.core.scorer")
     scorers_pkg = evaluator_dir / "ai4sci_bench" / "scorers"
     for scorer_file in sorted(scorers_pkg.glob("*.py")):
         if not scorer_file.stem.startswith("_") and scorer_file.stem != "custom":
@@ -188,44 +200,99 @@ def _run_scoring(
         custom_mod = importlib.import_module("ai4sci_bench.scorers.custom")
         custom_mod.load_custom_scorer(evaluator_dir)
 
-    # Load the core evaluation function
-    core = importlib.import_module("ai4sci_bench.core.task")
-    evaluate_fn = getattr(core, "_evaluate_gates_and_scores", None)
-    if evaluate_fn is None:
-        # Try alternate import path used in older revisions
-        scoring_mod = importlib.import_module("scoring")
-        evaluate_fn = scoring_mod._evaluate_gates_and_scores
+    # The shared scoring core. Dependency-light by construction so it imports
+    # cleanly in the minimal /opt/asi-eval environment.
+    scoring_mod = importlib.import_module("ai4sci_bench.core.scoring")
+    evaluate_fn = scoring_mod._evaluate_gates_and_scores
+
+    # max_score and the task divisor come from the framework, not from local
+    # arithmetic, so rewards stay bit-identical to `asibench score`.
+    scorer_mod = importlib.import_module("ai4sci_bench.core.scorer")
+    scoring_max_score = scorer_mod.scoring_max_score
+    normalize_task_score = scorer_mod.normalize_task_score
 
     params = instance.get("parameters") or {}
-    prompt_level = instance.get("prompt_level", "B1").upper()
+    # The framework uses lowercase level values ("b1"); never upper-case here.
+    prompt_level = instance.get("prompt_level") or None
 
-    result = evaluate_fn(evaluation, pred_dir, ref_dir, params, prompt_level)
-    return result
+    # ``prompt_level`` is keyword-only; ``_evaluate_gates_and_scores`` returns a
+    # 5-tuple, not a dict.
+    gates, hard_ok, soft_failures, scores, final_score = evaluate_fn(
+        evaluation,
+        pred_dir,
+        ref_dir,
+        params,
+        prompt_level=prompt_level,
+    )
+
+    # Same two steps as ai4sci_bench.benchflow: raw weight sum, then normalize
+    # BOTH score and maximum by the task divisor (the ratio is divisor-invariant).
+    raw_max_score = scoring_max_score(evaluation)
+    final_score, max_score = normalize_task_score(
+        evaluation, final_score, raw_max_score
+    )
+
+    # An evaluator fault surfaces per-ScoreDetail, not as a top-level flag.
+    all_details = [*gates, *scores]
+    internal_error = any(
+        isinstance(detail.details, dict)
+        and detail.details.get("scorer_internal_error") is True
+        for detail in all_details
+    )
+
+    return {
+        "final_score": None if final_score is None else float(final_score),
+        "max_score": float(max_score),
+        "raw_max_score": float(raw_max_score),
+        "hard_gates_passed": bool(hard_ok),
+        "soft_gate_failures": int(soft_failures),
+        "gate_results": [_detail_dict(detail) for detail in gates],
+        "score_results": [_detail_dict(detail) for detail in scores],
+        "scorer_internal_error": internal_error,
+    }
 
 
 # ── reward normalization ─────────────────────────────────────────────────────
 
-def _normalize_reward(
-    result: dict[str, Any],
-    score_divisor: float,
-) -> float:
-    """Compute [0,1] reward from ASI scoring result.
+def _normalize_reward(result: dict[str, Any]) -> float:
+    """Compute the [0,1] reward from an ASI scoring result.
 
-    score_divisor scales max_score: effective_max = max_score * score_divisor.
-    For example, ising has score_divisor=1.05 meaning max possible is 105
-    when max_score=100, so reward = final_score / (100 * 1.05).
-    When score_divisor=1.0 (default), effective_max = max_score.
+    ``_run_scoring`` already passed both ``final_score`` and ``max_score``
+    through the framework's ``normalize_task_score``, which divides BOTH by the
+    task's ``score_divisor``. The divisor therefore cancels in this ratio and
+    must NOT be applied a second time here — doing so would under-report every
+    task with a divisor != 1.0 (e.g. ising at 1.05) by that factor.
     """
     final_score = float(result.get("final_score") or 0.0)
     max_score = float(result.get("max_score") or 0.0)
-    effective_max = max(max_score, 1.0) * score_divisor
-    reward = final_score / effective_max
-    return max(0.0, min(1.0, reward))
+    if max_score <= 0.0:
+        # A task whose scoring weights sum to zero cannot produce a meaningful
+        # reward. Treat it as an evaluator/config fault, never as a 0 score.
+        raise ValueError(
+            f"task declares non-positive max_score ({max_score}); "
+            "cannot normalize reward"
+        )
+    return max(0.0, min(1.0, final_score / max_score))
+
+
+def _json_default(value: Any) -> Any:
+    """Coerce numpy scalars / Paths that scorers put in ScoreDetail.details."""
+    if hasattr(value, "item"):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return str(value)
 
 
 # ── output writers ───────────────────────────────────────────────────────────
 
-def _write_reward(reward: float, result: dict, instance: dict, artifact_shas: dict[str, str]) -> None:
+def _write_reward(
+    reward: float,
+    result: dict,
+    instance: dict,
+    artifact_shas: dict[str, str],
+    score_divisor: float,
+) -> None:
     """Write reward.txt and reward.json to /logs/verifier/."""
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -247,17 +314,20 @@ def _write_reward(reward: float, result: dict, instance: dict, artifact_shas: di
             "hf_revision": instance.get("hf_revision"),
             "final_score": result.get("final_score"),
             "max_score": result.get("max_score"),
-            "score_divisor": result.get("score_divisor", 1.0),
+            "raw_max_score": result.get("raw_max_score"),
+            "score_divisor": score_divisor,
         },
         "details": {
             "hard_gates_passed": result.get("hard_gates_passed", False),
+            "soft_gate_failures": result.get("soft_gate_failures", 0),
             "gate_results": result.get("gate_results") or [],
             "score_results": result.get("score_results") or [],
         },
-        "artifacts": {path: sha for path, sha in artifact_shas.items()},
+        "artifacts": dict(artifact_shas),
     }
     (LOGS_DIR / "reward.json").write_text(
-        json.dumps(reward_json, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(reward_json, indent=2, ensure_ascii=False, default=_json_default)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -265,7 +335,8 @@ def _write_reward(reward: float, result: dict, instance: dict, artifact_shas: di
     asi_json = dict(reward_json)
     asi_json["scorer_internal_error"] = result.get("scorer_internal_error", False)
     (LOGS_DIR / "asi_score.json").write_text(
-        json.dumps(asi_json, indent=2, ensure_ascii=False) + "\n",
+        json.dumps(asi_json, indent=2, ensure_ascii=False, default=_json_default)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -301,6 +372,8 @@ def main() -> int:
     try:
         instance = _load_instance()
         output_specs = _load_output_specs()
+        # Recorded for provenance only. The reward ratio is divisor-invariant
+        # because the framework normalizes score and maximum together.
         score_divisor = _load_score_divisor()
     except Exception as exc:
         _write_error(exc, "loading instance metadata")
@@ -332,37 +405,43 @@ def main() -> int:
         try:
             result = _run_scoring(EVALUATOR_DIR, staging, REFERENCE_DIR, instance)
         except Exception as exc:
-            # Distinguish evaluator crash from submission failure
-            internal = getattr(exc, "scorer_internal_error", False)
-            if internal or isinstance(exc, (ImportError, FileNotFoundError, AttributeError)):
-                _write_error(exc, "evaluator scoring")
-                print(f"[verifier] evaluator error (scoring): {exc}", file=sys.stderr)
-                return 1
-            # Treat as submission failure: score 0, exit 0
-            result = {
-                "final_score": 0.0,
-                "max_score": 1.0,
-                "hard_gates_passed": False,
-                "gate_results": [],
-                "score_results": [],
-                "scorer_internal_error": False,
-                "submission_failure": str(exc),
-            }
+            # Fail closed. `_evaluate_gates_and_scores` already converts every
+            # scorer-level exception into a ScoreDetail carrying
+            # scorer_internal_error, and a genuine submission failure (missing
+            # or malformed outputs) is reported by the scorers as a low score —
+            # not as a raised exception. Anything that escapes to here is
+            # therefore an evaluator/runtime fault and must never be recorded
+            # as a 0 score.
+            _write_error(exc, "evaluator scoring")
+            print(f"[verifier] evaluator error (scoring): {exc}", file=sys.stderr)
+            return 1
 
-        # Check for internal error flag from the scorer itself
+        # An evaluator fault detected inside the scoring details: same rule.
         if result.get("scorer_internal_error"):
+            failing = [
+                detail.get("scorer_name")
+                for detail in [*result.get("gate_results", []),
+                               *result.get("score_results", [])]
+                if isinstance(detail.get("details"), dict)
+                and detail["details"].get("scorer_internal_error") is True
+            ]
             exc = RuntimeError(
-                f"Scorer reported internal error: {result.get('error_detail', 'unknown')}"
+                f"scorer reported an internal error: {failing or 'unknown scorer'}"
             )
             _write_error(exc, "scorer_internal_error flag")
             print(f"[verifier] evaluator error (internal flag): {exc}", file=sys.stderr)
             return 1
 
-        # 6. Normalize reward
-        reward = _normalize_reward(result, score_divisor)
+        # 6. Normalize reward (divisor already applied by the framework)
+        try:
+            reward = _normalize_reward(result)
+        except Exception as exc:
+            _write_error(exc, "reward normalization")
+            print(f"[verifier] evaluator error (normalization): {exc}", file=sys.stderr)
+            return 1
 
         # 7. Write outputs (submission result → exit 0)
-        _write_reward(reward, result, instance, artifact_shas)
+        _write_reward(reward, result, instance, artifact_shas, score_divisor)
         print(f"[verifier] reward={reward:.6f}", file=sys.stdout)
         return 0
 

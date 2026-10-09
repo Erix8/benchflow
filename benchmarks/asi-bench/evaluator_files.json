@@ -2,14 +2,14 @@
   "schema_version": 1,
   "upstream": {
     "repo": "apexin-ai/ASI-Bench",
-    "revision": "e72663e6b5ae306546fc54b89b962da804e1a394"
+    "revision": "f13175a89dc9b4873f6306a3d31e46927c38f1a9"
   },
   "files": [
     {
       "path": "ai4sci_bench/__init__.py",
       "kind": "copy",
       "source": "ai4sci_bench/__init__.py",
-      "source_sha256": "b79252b4914c26e69049accefde24a5d7470734be7b9f2ef10b9b3fac28cbd83"
+      "source_sha256": "0a7a1883524111026e0c3543471a635b9cdca088b447bf459f0f4b34f1b2158f"
     },
     {
       "path": "ai4sci_bench/branding.py",
@@ -25,13 +25,19 @@
       "path": "ai4sci_bench/core/types.py",
       "kind": "copy",
       "source": "ai4sci_bench/core/types.py",
-      "source_sha256": "91130a9bd04b7ae656e24b40b0038524dd6034b4470229b988a5531e32e80cc3"
+      "source_sha256": "4f1111d859c8bfb5a63b15ab02e98e31da6e5d771368fb04a08c85406c36d160"
     },
     {
       "path": "ai4sci_bench/core/scorer.py",
       "kind": "copy",
       "source": "ai4sci_bench/core/scorer.py",
-      "source_sha256": "d7f3aed05e7ce26629827f2a15ddc81ed1cd7fd11cbe7dcfaf8ab7cb35505417"
+      "source_sha256": "26d1a5e0e4ef8a34f6594a4a5d5be21236bdb28b6b3dc750222a525b4ec13fc3"
+    },
+    {
+      "path": "ai4sci_bench/core/scoring.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/core/scoring.py",
+      "source_sha256": "91feffd409bebfcdcbf98900a2781b55f1c0c4d08a6b5d6dd597709f237f375e"
     },
     {
       "path": "ai4sci_bench/core/logger.py",
