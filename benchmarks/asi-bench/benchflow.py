@@ -426,9 +426,27 @@ def _render_task_md(
     hf_revision: str,
 ) -> str:
     requires_network = task_meta.get("difficulty", {}).get("requires_network", False)
-    network_mode = "public" if requires_network else "no-network"
     timeout_sec = int(task_meta.get("timeout_seconds") or 3600)
     verifier_timeout_sec = max(900, timeout_sec // 4)
+
+    # BenchFlow attaches NET_ADMIN (needed for the UID egress firewall) only when
+    # network_mode is "denylist".  "no-network" skips NET_ADMIN, so the container-
+    # internal iptables call fails with "Permission denied".  We use "denylist" with
+    # a catch-all blocked_hosts entry to achieve the same full-block semantics while
+    # giving the container the capability it needs to enforce the firewall.
+    # Tasks that genuinely require network access keep "public" unchanged.
+    if requires_network:
+        network_mode = "public"
+        sandbox_extra: dict[str, Any] = {}
+    else:
+        network_mode = "denylist"
+        # Block every external host.  BenchFlow still allows the loopback LiteLLM
+        # proxy (the model gateway) regardless of the denylist.
+        # blocked_hosts must be non-empty for denylist mode; use a placeholder
+        # hostname.  The UID firewall (iptables owner rule) is the actual
+        # enforcement layer and blocks ALL external traffic from the agent user
+        # regardless of this list.
+        sandbox_extra = {"blocked_hosts": ["placeholder.invalid"]}
 
     frontmatter: dict[str, Any] = {
         "schema_version": "1.0",
@@ -449,6 +467,7 @@ def _render_task_md(
             "memory_mb": 4096,
             "workdir": "/workspace",
             "network_mode": network_mode,
+            **sandbox_extra,
         },
     }
     fm_text = yaml.dump(
