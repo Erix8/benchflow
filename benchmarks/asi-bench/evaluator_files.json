@@ -72,16 +72,6 @@
       "kind": "copy",
       "source": "ai4sci_bench/scorers/numerical.py",
       "source_sha256": "43c793497d0b2a9b435394285c023e303ad3ad27f196965bea65938932910b38"
-    },
-    {
-      "path": "ai4sci_bench/runner/__init__.py",
-      "kind": "initializer"
-    },
-    {
-      "path": "ai4sci_bench/runner/task_env.py",
-      "kind": "runtime_adapter",
-      "template": "templates/verifier/task_env.py",
-      "reason": "Current-image compatibility API; no ASI installation, cache or environment creation"
     }
   ]
 }
