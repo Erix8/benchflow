@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repo": "apexin-ai/ASI-Bench",
+    "revision": "e72663e6b5ae306546fc54b89b962da804e1a394"
+  },
+  "files": [
+    {
+      "path": "ai4sci_bench/__init__.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/__init__.py",
+      "source_sha256": "b79252b4914c26e69049accefde24a5d7470734be7b9f2ef10b9b3fac28cbd83"
+    },
+    {
+      "path": "ai4sci_bench/branding.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/branding.py",
+      "source_sha256": "963477d80bab15e1a781da5b03c8eb2ea2fd35354ce2d0970d0038f862e2f990"
+    },
+    {
+      "path": "ai4sci_bench/core/__init__.py",
+      "kind": "initializer"
+    },
+    {
+      "path": "ai4sci_bench/core/types.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/core/types.py",
+      "source_sha256": "91130a9bd04b7ae656e24b40b0038524dd6034b4470229b988a5531e32e80cc3"
+    },
+    {
+      "path": "ai4sci_bench/core/scorer.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/core/scorer.py",
+      "source_sha256": "d7f3aed05e7ce26629827f2a15ddc81ed1cd7fd11cbe7dcfaf8ab7cb35505417"
+    },
+    {
+      "path": "ai4sci_bench/core/logger.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/core/logger.py",
+      "source_sha256": "ed86ad13814d7401358b42a994b0744d44fa60bbf97630aa374b8b418d06d1a4"
+    },
+    {
+      "path": "ai4sci_bench/core/task.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/core/task.py",
+      "source_sha256": "9418656108a7c9007f52f1255bbdbab68a4ad889c260086aa62eec340d62e62b"
+    },
+    {
+      "path": "ai4sci_bench/scorers/__init__.py",
+      "kind": "initializer"
+    },
+    {
+      "path": "ai4sci_bench/scorers/file_match.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/scorers/file_match.py",
+      "source_sha256": "26a530bb0d27a0e7cf05fba8e1e7520634ff8905e57f2db420e11daea30d5500"
+    },
+    {
+      "path": "ai4sci_bench/scorers/custom.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/scorers/custom.py",
+      "source_sha256": "a62a740716f549449bf2305646aff952587f2e54a52bf5511c8395a8eb8eb742"
+    },
+    {
+      "path": "ai4sci_bench/scorers/code_analysis.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/scorers/code_analysis.py",
+      "source_sha256": "86f909fa99bdf693775d31a986ec884fb6b41b2f98e0592394ef7ad0279f0eba"
+    },
+    {
+      "path": "ai4sci_bench/scorers/numerical.py",
+      "kind": "copy",
+      "source": "ai4sci_bench/scorers/numerical.py",
+      "source_sha256": "43c793497d0b2a9b435394285c023e303ad3ad27f196965bea65938932910b38"
+    },
+    {
+      "path": "ai4sci_bench/runner/__init__.py",
+      "kind": "initializer"
+    },
+    {
+      "path": "ai4sci_bench/runner/task_env.py",
+      "kind": "runtime_adapter",
+      "template": "templates/verifier/task_env.py",
+      "reason": "Current-image compatibility API; no ASI installation, cache or environment creation"
+    }
+  ]
+}

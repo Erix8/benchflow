@@ -296,7 +296,16 @@ def _materialize_evaluator_files(ef_spec: dict, evaluator_dir: Path) -> None:
             asi_root = candidate
             break
 
-    for file_entry in ef_spec.get("files", []):
+    entries = ef_spec.get("files") or []
+    if not entries:
+        raise ValueError("evaluator_files.json declares no files")
+    if asi_root is None and any(e.get("kind", "copy") == "copy" for e in entries):
+        raise FileNotFoundError(
+            "Cannot locate an ASI-Bench checkout containing ai4sci_bench/; "
+            "set ASI_BENCH_SOURCE to the repository root"
+        )
+
+    for file_entry in entries:
         dest_rel = file_entry.get("path", "")
         if not dest_rel:
             continue
@@ -312,18 +321,18 @@ def _materialize_evaluator_files(ef_spec: dict, evaluator_dir: Path) -> None:
         elif kind in ("copy", "runtime_adapter"):
             src_rel = file_entry.get("source") or file_entry.get("template")
             if not src_rel:
-                continue
+                raise ValueError(f"evaluator file entry has no source: {dest_rel}")
             if kind == "runtime_adapter":
                 src = _SCRIPT_DIR / "verifier_template" / Path(src_rel).name
-            elif asi_root is not None:
+            else:
+                assert asi_root is not None  # guarded above
                 src = asi_root / src_rel
-            else:
-                logger.warning("ASI_BENCH_SOURCE not set; skipping evaluator file %s", dest_rel)
-                continue
-            if src.is_file():
-                shutil.copy2(src, dest)
-            else:
-                logger.warning("Evaluator source not found: %s", src)
+            if not src.is_file():
+                raise FileNotFoundError(
+                    f"Evaluator source not found: {src} (declared as {dest_rel}). "
+                    "The verifier cannot import ai4sci_bench without it."
+                )
+            shutil.copy2(src, dest)
 
 
 # ── task skip logic ───────────────────────────────────────────────────────────
@@ -677,10 +686,14 @@ def _generate_task_dir(
         shutil.copy2(custom_scorer_src, evaluator_dir / "custom_scorer.py")
 
     ef_path = _SCRIPT_DIR / "evaluator_files.json"
-    if ef_path.is_file():
-        with ef_path.open(encoding="utf-8") as fh:
-            ef_spec = json.load(fh)
-        _materialize_evaluator_files(ef_spec, evaluator_dir)
+    if not ef_path.is_file():
+        raise FileNotFoundError(
+            f"evaluator_files.json not found at {ef_path}; the generated verifier "
+            "would lack ai4sci_bench and fail at scoring time"
+        )
+    with ef_path.open(encoding="utf-8") as fh:
+        ef_spec = json.load(fh)
+    _materialize_evaluator_files(ef_spec, evaluator_dir)
 
     # 6. verifier/reference/
     ref_dst = verifier_dir / "reference"
