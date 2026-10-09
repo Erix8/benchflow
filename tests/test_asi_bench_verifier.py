@@ -336,7 +336,7 @@ class TestNormalizeReward:
 
 
 def test_verifier_stages_private_instance_data_and_ignores_agent_data(tmp_path, monkeypatch):
-    """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
+    """Guards seed31415 P3 input and prediction persistence after 111b3748."""
     mod = _load_score_entry()
     verifier = tmp_path / "verifier"
     private_data = verifier / "instance_data" / "data"
@@ -367,6 +367,10 @@ def test_verifier_stages_private_instance_data_and_ignores_agent_data(tmp_path, 
     monkeypatch.setattr(mod, "_run_scoring", fake_score)
     assert mod.main() == 0
     assert json.loads((mod.LOGS_DIR / "reward.json").read_text())["reward"] == 0.5
+    # Guards P3 parity: BenchFlow deletes the sandbox after scoring, so the
+    # verifier must preserve the exact declared outputs in its host-mounted logs.
+    assert (mod.LOGS_DIR / "predictions" / "roots.npy").read_bytes() == b"prediction"
+    assert not (mod.LOGS_DIR / "predictions" / "data").exists()
 
 
 def test_missing_private_instance_data_is_verifier_error(tmp_path, monkeypatch):

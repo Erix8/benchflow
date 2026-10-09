@@ -140,6 +140,25 @@ def _stage_data_inputs(data_src: Path, staging: Path, *, required: bool) -> None
             raise MissingEvaluatorInputError(f"Evaluator input contains unsupported file: {relative}")
 
 
+def _persist_prediction_outputs(staging: Path, artifact_shas: dict[str, str]) -> None:
+    """Keep scored predictions in host-mounted verifier logs for parity checks."""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    destination = LOGS_DIR / "predictions"
+    if destination.exists() or destination.is_symlink():
+        raise RuntimeError(f"Prediction archive already exists: {destination}")
+    destination.mkdir()
+    for rel_str, expected_sha in sorted(artifact_shas.items()):
+        rel = _safe_rel(rel_str)
+        source = staging / rel
+        if not _is_safe_regular(source):
+            raise RuntimeError(f"Staged prediction disappeared: {rel_str}")
+        target = destination / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        if _sha256(target) != expected_sha:
+            raise RuntimeError(f"Persisted prediction checksum mismatch: {rel_str}")
+
+
 # ── evaluator bootstrap ──────────────────────────────────────────────────────
 
 def _bootstrap_evaluator(evaluator_dir: Path) -> None:
@@ -389,6 +408,7 @@ def _write_error(exc: Exception, context: str) -> None:
             p = LOGS_DIR / name
             if p.exists():
                 p.unlink()
+        shutil.rmtree(LOGS_DIR / "predictions", ignore_errors=True)
     except OSError:
         # Can't write to /logs (e.g. running outside the sandbox); stderr only.
         pass
@@ -472,7 +492,11 @@ def main() -> int:
             print(f"[verifier] evaluator error (normalization): {exc}", file=sys.stderr)
             return 1
 
-        # 7. Write outputs (submission result → exit 0)
+        # 7. Preserve the exact scored files before the sandbox is destroyed.
+        # BenchFlow mounts /logs/verifier on the host; /workspace is ephemeral.
+        _persist_prediction_outputs(staging, artifact_shas)
+
+        # 8. Write outputs (submission result → exit 0)
         _write_reward(reward, result, instance, artifact_shas, score_divisor)
         print(f"[verifier] reward={reward:.6f}", file=sys.stdout)
         return 0

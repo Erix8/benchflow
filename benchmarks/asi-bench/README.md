@@ -15,6 +15,10 @@ verifier inputs produce `asi_error.json`, no reward, and a nonzero exit.
 The verifier writes a scalar `reward.txt` and structured `reward.json` under
 `/logs/verifier/` after a valid evaluation. A partial reward below 1 is a
 BenchFlow `FAIL` classification, while the reward remains a valid ASI score.
+It also copies the exact declared prediction files into
+`/logs/verifier/predictions/`, which BenchFlow preserves with the job after
+removing the Docker workspace. Their SHA-256 values are recorded in
+`reward.json.artifacts` for side-by-side `asibench score` checks.
 
 `benchflow.py` converts instances; `main.py` is its CLI entry point. The
 `evaluator_files.json` source revision must match `ASI_REVISION` in
