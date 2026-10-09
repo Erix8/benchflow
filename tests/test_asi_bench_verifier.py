@@ -18,9 +18,7 @@ import json
 import os
 import subprocess
 import sys
-import textwrap
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -199,6 +197,27 @@ class TestStageOutputs:
         expected_sha = hashlib.sha256(content).hexdigest()
         assert present.get("out.bin") == expected_sha
 
+    def test_declared_output_cannot_replace_evaluator_data(self, tmp_path):
+        """Guards the seed31415 homotopy P3 input boundary (2026-10-09)."""
+        workspace = tmp_path / "workspace"
+        (workspace / "data").mkdir(parents=True)
+        (workspace / "data" / "system.json").write_text("agent version")
+        staging = tmp_path / "staging"
+        (staging / "data").mkdir(parents=True)
+        (staging / "data" / "system.json").write_text("trusted version")
+        with pytest.raises(self.mod.MissingEvaluatorInputError, match="overlaps"):
+            self.mod._stage_outputs(workspace, [{"name": "data/system.json"}], staging)
+        assert (staging / "data" / "system.json").read_text() == "trusted version"
+
+    def test_private_data_symlink_is_verifier_error(self, tmp_path):
+        """Guards the seed31415 homotopy P3 input boundary (2026-10-09)."""
+        private = tmp_path / "private"
+        private.mkdir()
+        (private / "system.json").symlink_to(tmp_path / "outside.json")
+        (tmp_path / "staging").mkdir()
+        with pytest.raises(self.mod.MissingEvaluatorInputError, match="symlink"):
+            self.mod._stage_data_inputs(private, tmp_path / "staging", required=True)
+
 
 # ── _write_reward / _write_error tests ───────────────────────────────────────
 
@@ -215,7 +234,7 @@ class TestWriteReward:
         result = {"final_score": 0.75, "max_score": 1.0, "hard_gates_passed": True,
                   "gate_results": [], "score_results": [], "score_divisor": 1.0}
 
-        self.mod._write_reward(0.75, result, instance, {})
+        self.mod._write_reward(0.75, result, instance, {}, 1.0)
 
         txt_val = float((tmp_path / "logs" / "verifier" / "reward.txt").read_text().strip())
         json_val = json.loads(
@@ -234,7 +253,7 @@ class TestWriteReward:
         result = {"final_score": 0.42, "max_score": 1.0, "hard_gates_passed": False,
                   "gate_results": [], "score_results": [], "score_divisor": 1.0}
 
-        self.mod._write_reward(0.42, result, instance, {})
+        self.mod._write_reward(0.42, result, instance, {}, 1.0)
         reward_json = json.loads(
             (tmp_path / "logs" / "verifier" / "reward.json").read_text()
         )
@@ -249,7 +268,7 @@ class TestWriteReward:
         result = {"final_score": 77.3, "max_score": 100.0, "hard_gates_passed": True,
                   "gate_results": [], "score_results": [], "score_divisor": 1.0}
 
-        self.mod._write_reward(0.773, result, instance, {})
+        self.mod._write_reward(0.773, result, instance, {}, 1.0)
         reward_json = json.loads(
             (tmp_path / "logs" / "verifier" / "reward.json").read_text()
         )
@@ -294,27 +313,79 @@ class TestNormalizeReward:
 
     def test_basic_normalization(self):
         result = {"final_score": 50.0, "max_score": 100.0}
-        assert abs(self.mod._normalize_reward(result, 1.0) - 0.5) < 1e-9
+        assert abs(self.mod._normalize_reward(result) - 0.5) < 1e-9
 
     def test_score_divisor_override(self):
-        # ising: score_divisor=1.05 means effective_max = max_score * 1.05 = 105.
-        # reward = final_score / (max_score * score_divisor) = 99.75 / 105
-        result = {"final_score": 99.75, "max_score": 100.0}
-        reward = self.mod._normalize_reward(result, 1.05)
-        expected = 99.75 / (100.0 * 1.05)
+        # The framework applies the divisor to both score and maximum.
+        result = {"final_score": 99.75 / 1.05, "max_score": 100.0 / 1.05}
+        reward = self.mod._normalize_reward(result)
+        expected = 99.75 / 100.0
         assert abs(reward - expected) < 1e-9
         assert 0.0 <= reward <= 1.0
 
     def test_reward_clamped_to_zero_one(self):
         result = {"final_score": 200.0, "max_score": 100.0}
-        assert self.mod._normalize_reward(result, 1.0) == 1.0
+        assert self.mod._normalize_reward(result) == 1.0
 
         result2 = {"final_score": -5.0, "max_score": 100.0}
-        assert self.mod._normalize_reward(result2, 1.0) == 0.0
+        assert self.mod._normalize_reward(result2) == 0.0
 
     def test_zero_score_returns_zero(self):
         result = {"final_score": 0.0, "max_score": 100.0}
-        assert self.mod._normalize_reward(result, 1.0) == 0.0
+        assert self.mod._normalize_reward(result) == 0.0
+
+
+def test_verifier_stages_private_instance_data_and_ignores_agent_data(tmp_path, monkeypatch):
+    """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
+    mod = _load_score_entry()
+    verifier = tmp_path / "verifier"
+    private_data = verifier / "instance_data" / "data"
+    private_data.mkdir(parents=True)
+    (private_data / "system.json").write_text('{"trusted": true}')
+    workspace = tmp_path / "workspace"
+    (workspace / "data").mkdir(parents=True)
+    (workspace / "data" / "system.json").write_text('{"trusted": false}')
+    (workspace / "roots.npy").write_bytes(b"prediction")
+    _make_instance_json(tmp_path, requires_instance_data=True)
+    _make_output_specs(tmp_path, [{"name": "roots.npy"}])
+    monkeypatch.setattr(mod, "VERIFIER_DIR", verifier)
+    monkeypatch.setattr(mod, "INSTANCE_JSON", verifier / "instance.json")
+    monkeypatch.setattr(mod, "OUTPUT_SPECS_JSON", verifier / "output_specs.json")
+    monkeypatch.setattr(mod, "SCORE_DIVISOR_JSON", verifier / "score_divisor.json")
+    monkeypatch.setattr(mod, "EVALUATOR_DIR", verifier / "evaluator")
+    monkeypatch.setattr(mod, "REFERENCE_DIR", verifier / "reference")
+    monkeypatch.setattr(mod, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(mod, "LOGS_DIR", tmp_path / "logs" / "verifier")
+
+    def fake_score(_evaluator, pred_dir, _reference, _instance):
+        assert (pred_dir / "data" / "system.json").read_text() == '{"trusted": true}'
+        assert (pred_dir / "roots.npy").read_bytes() == b"prediction"
+        return {"final_score": 5.0, "max_score": 10.0,
+                "hard_gates_passed": True, "gate_results": [], "score_results": [],
+                "scorer_internal_error": False}
+
+    monkeypatch.setattr(mod, "_run_scoring", fake_score)
+    assert mod.main() == 0
+    assert json.loads((mod.LOGS_DIR / "reward.json").read_text())["reward"] == 0.5
+
+
+def test_missing_private_instance_data_is_verifier_error(tmp_path, monkeypatch):
+    """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
+    mod = _load_score_entry()
+    _make_instance_json(tmp_path, requires_instance_data=True)
+    _make_output_specs(tmp_path, [])
+    verifier = tmp_path / "verifier"
+    monkeypatch.setattr(mod, "INSTANCE_JSON", verifier / "instance.json")
+    monkeypatch.setattr(mod, "OUTPUT_SPECS_JSON", verifier / "output_specs.json")
+    monkeypatch.setattr(mod, "SCORE_DIVISOR_JSON", verifier / "score_divisor.json")
+    monkeypatch.setattr(mod, "EVALUATOR_DIR", verifier / "evaluator")
+    monkeypatch.setattr(mod, "REFERENCE_DIR", verifier / "reference")
+    monkeypatch.setattr(mod, "WORKSPACE_DIR", tmp_path / "workspace")
+    monkeypatch.setattr(mod, "LOGS_DIR", tmp_path / "logs" / "verifier")
+    monkeypatch.setattr(mod, "_run_scoring", lambda *_: pytest.fail("scorer must not run"))
+    assert mod.main() == 1
+    assert not (mod.LOGS_DIR / "reward.json").exists()
+    assert json.loads((mod.LOGS_DIR / "asi_error.json").read_text())["failure_kind"] == "missing_evaluator_input"
 
 
 # ── end-to-end subprocess tests ───────────────────────────────────────────────

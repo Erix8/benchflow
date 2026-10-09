@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import tempfile
-import textwrap
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -38,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # ── pinned revisions ─────────────────────────────────────────────────────────
 # Both must be updated together; converter refuses to run with placeholders.
-ASI_REVISION = "e72663e6b5ae306546fc54b89b962da804e1a394"
+ASI_REVISION = "f13175a89dc9b4873f6306a3d31e46927c38f1a9"
 HF_REVISION = "main"   # replace with immutable HF dataset commit when available
 
 SUPPORTED_SEED = 31415
@@ -107,6 +106,25 @@ def _safe_path(value: str) -> Path:
     if any(p in ("", ".", "..") for p in parts) or "\\" in value or "\x00" in value:
         raise ValueError(f"unsafe source path: {value!r}")
     return Path(*parts)
+
+
+def _copy_instance_data(source: Path, destination: Path) -> None:
+    """Copy materialized instance inputs without following links or special files."""
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError(f"Instance data is not a real directory: {source}")
+    destination.mkdir(parents=True)
+    for path in source.rglob("*"):
+        relative = path.relative_to(source)
+        target = destination / relative
+        if path.is_symlink():
+            raise ValueError(f"Instance data contains a symlink: {relative}")
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif path.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        else:
+            raise ValueError(f"Instance data contains unsupported input: {relative}")
 
 
 def _checked_sha(value: str) -> str:
@@ -283,6 +301,8 @@ def _download_task_bundle(task_id: str, destination: Path, asi_revision: str) ->
 
 def _materialize_evaluator_files(ef_spec: dict, evaluator_dir: Path) -> None:
     """Copy evaluator framework files specified in evaluator_files.json."""
+    if (ef_spec.get("upstream") or {}).get("revision") != ASI_REVISION:
+        raise ValueError("evaluator_files.json revision differs from ASI_REVISION")
     asi_root_candidates: list[Path] = []
     asi_source = os.environ.get("ASI_BENCH_SOURCE")
     if asi_source:
@@ -332,6 +352,11 @@ def _materialize_evaluator_files(ef_spec: dict, evaluator_dir: Path) -> None:
                     f"Evaluator source not found: {src} (declared as {dest_rel}). "
                     "The verifier cannot import ai4sci_bench without it."
                 )
+            if kind == "copy":
+                expected = file_entry.get("source_sha256")
+                actual = hashlib.sha256(src.read_bytes()).hexdigest()
+                if not expected or actual != expected:
+                    raise ValueError(f"Evaluator source SHA-256 mismatch: {src_rel}")
             shutil.copy2(src, dest)
 
 
@@ -489,7 +514,7 @@ def _safe_rel_output(value: str) -> Path:
     if not value or value.startswith("/") or "\\" in value or "\x00" in value:
         raise ValueError(f"unsafe output path: {value!r}")
     parts = value.split("/")
-    if any(p in ("", "..") for p in parts):
+    if any(p in ("", ".", "..") for p in parts):
         raise ValueError(f"unsafe output path: {value!r}")
     return Path(value)
 
@@ -642,27 +667,23 @@ def _generate_task_dir(
     env_dir.mkdir(parents=True)
     (env_dir / "Dockerfile").write_text(_build_dockerfile(task_meta), encoding="utf-8")
 
-    # 3. environment/inputs/ — declared input files
+    # 3. Complete materialized inputs for the agent and an immutable verifier copy.
+    # Input names may contain expansion templates, so copying literal declarations
+    # can omit files that the original ASI scorer sees.
     inputs_dir = env_dir / "inputs"
     inputs_dir.mkdir()
-    for item in (task_meta.get("input") or {}).get("files") or []:
-        rel_str = item.get("name", "")
-        if not rel_str:
-            continue
-        rel_path = Path(rel_str)
-        if rel_path.parts[0] != "data":
-            rel_path = Path("data") / rel_path
-        src = instance_dir / rel_path
-        if not src.is_file():
-            logger.warning("Input file not found, skipping: %s", src)
-            continue
-        dst = inputs_dir / rel_path
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+    input_files = (task_meta.get("input") or {}).get("files") or []
+    instance_data = instance_dir / "data"
+    if input_files and not instance_data.is_dir():
+        raise ValueError(f"Required instance data directory is missing: {instance_data}")
+    if instance_data.exists() or instance_data.is_symlink():
+        _copy_instance_data(instance_data, inputs_dir / "data")
 
     # 4. verifier/ — template files
     verifier_dir = staging / "verifier"
     verifier_dir.mkdir()
+    if instance_data.exists() or instance_data.is_symlink():
+        _copy_instance_data(instance_data, verifier_dir / "instance_data" / "data")
     verifier_template_dir = _SCRIPT_DIR / "verifier_template"
     for tmpl in ("test.sh", "score_entry.py"):
         src = verifier_template_dir / tmpl
@@ -717,6 +738,7 @@ def _generate_task_dir(
         "asi_revision": asi_revision,
         "hf_revision": hf_revision,
         "parameters": params,
+        "requires_instance_data": bool(input_files),
     }
     (verifier_dir / "instance.json").write_text(
         json.dumps(instance_json, indent=2, ensure_ascii=False) + "\n",

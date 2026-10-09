@@ -36,6 +36,12 @@ OUTPUT_SPECS_JSON = VERIFIER_DIR / "output_specs.json"
 SCORE_DIVISOR_JSON = VERIFIER_DIR / "score_divisor.json"
 
 
+class MissingEvaluatorInputError(RuntimeError):
+    """Immutable input required by the evaluator is absent or unsafe."""
+
+    failure_kind = "missing_evaluator_input"
+
+
 # ── path safety ─────────────────────────────────────────────────────────────
 
 def _safe_rel(value: str) -> Path:
@@ -43,7 +49,7 @@ def _safe_rel(value: str) -> Path:
     if not value or value.startswith("/") or "\\" in value or "\x00" in value:
         raise ValueError(f"unsafe output path: {value!r}")
     parts = value.split("/")
-    if any(p in ("", "..") for p in parts):
+    if any(p in ("", ".", "..") for p in parts):
         raise ValueError(f"unsafe output path: {value!r}")
     return Path(value)
 
@@ -88,28 +94,50 @@ def _stage_outputs(
             continue  # invalid spec → skip, scorer will fail
 
         src = workspace / rel
+        if rel.parts[0] == "data":
+            raise MissingEvaluatorInputError(
+                f"Declared prediction overlaps evaluator input: {rel}"
+            )
+        if any((workspace / Path(*rel.parts[:i])).is_symlink() for i in range(1, len(rel.parts))):
+            # A nested path through an agent-authored symlink is not a safe output.
+            continue
         if src.is_symlink():
             # Reject symlinks; scorer will see the file missing
             continue
-        if not src.is_file():
+        if not _is_safe_regular(src):
             continue  # missing; scorer handles it as submission failure
 
         dst = staging / rel
+        if dst.exists() or dst.is_symlink():
+            raise MissingEvaluatorInputError(f"Prediction would overwrite evaluator input: {rel}")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         present[rel_str] = _sha256(dst)
     return present
 
 
-def _stage_data_inputs(evaluator_dir: Path, staging: Path) -> None:
-    """Copy instance data/ from the evaluator bundle into staging/ for scorers."""
-    # Some scorers need the original data/ directory alongside predictions.
-    # It lives in the evaluator dir, placed there by the converter.
-    data_src = evaluator_dir / "data"
-    if data_src.is_dir():
-        data_dst = staging / "data"
-        if not data_dst.exists():
-            shutil.copytree(data_src, data_dst, symlinks=False)
+def _stage_data_inputs(data_src: Path, staging: Path, *, required: bool) -> None:
+    """Copy the verifier-owned instance data tree into the scorer workspace."""
+    if not data_src.exists() and not data_src.is_symlink():
+        if required:
+            raise MissingEvaluatorInputError(f"Required evaluator input is missing: {data_src}")
+        return
+    if data_src.is_symlink() or not data_src.is_dir():
+        raise MissingEvaluatorInputError(f"Evaluator input is not a real directory: {data_src}")
+    data_dst = staging / "data"
+    data_dst.mkdir()
+    for path in data_src.rglob("*"):
+        relative = path.relative_to(data_src)
+        target = data_dst / relative
+        if path.is_symlink():
+            raise MissingEvaluatorInputError(f"Evaluator input contains a symlink: {relative}")
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif path.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        else:
+            raise MissingEvaluatorInputError(f"Evaluator input contains unsupported file: {relative}")
 
 
 # ── evaluator bootstrap ──────────────────────────────────────────────────────
@@ -345,6 +373,7 @@ def _write_error(exc: Exception, context: str) -> None:
     """Write asi_error.json (no reward) for infrastructure failures."""
     error_doc = {
         "scorer_internal_error": True,
+        "failure_kind": getattr(exc, "failure_kind", "evaluator_runtime_error"),
         "error_type": type(exc).__name__,
         "error_context": context,
         "detail": traceback.format_exc(),
@@ -398,8 +427,11 @@ def main() -> int:
     # 4. Stage outputs in a temp directory
     staging = Path(tempfile.mkdtemp(prefix="asi-verifier-"))
     try:
+        _stage_data_inputs(
+            VERIFIER_DIR / "instance_data" / "data", staging,
+            required=bool(instance.get("requires_instance_data")),
+        )
         artifact_shas = _stage_outputs(WORKSPACE_DIR, output_specs, staging)
-        _stage_data_inputs(EVALUATOR_DIR, staging)
 
         # 5. Run scoring
         try:

@@ -6,6 +6,7 @@ run BenchFlow, download source material, or claim scoring parity.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -179,3 +180,75 @@ def test_parity_placeholder_reports_insufficient_evidence() -> None:
 def test_verifier_test_script_is_executable() -> None:
     assert os.access(ADAPTER / "verifier_template" / "test.sh", os.X_OK)
 
+
+def test_converter_copies_complete_data_to_agent_and_verifier(tmp_path, monkeypatch) -> None:
+    """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
+    adapter = _load_adapter()
+    monkeypatch.setattr(adapter, "_render_task_md", lambda **_: "task")
+    monkeypatch.setattr(adapter, "_build_dockerfile", lambda _: "FROM python:3.11\n")
+    monkeypatch.setattr(adapter, "_materialize_evaluator_files", lambda *_: None)
+    instance = tmp_path / "instance"
+    (instance / "data" / "nested").mkdir(parents=True)
+    (instance / "data" / "system.json").write_text('{"system": 1}')
+    (instance / "data" / "nested" / "extra.json").write_text("extra")
+    reference = instance / "reference"
+    reference.mkdir()
+    (reference / "answer.json").write_text("{}")
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "task_eval.yaml").write_text("evaluation: {}\n")
+    staging = tmp_path / "task"
+    staging.mkdir()
+    adapter._generate_task_dir(
+        staging=staging, task_id="math.demo", instance_id="math.demo__seed31415",
+        prompt_level="B1", task_meta={"input": {"files": [{"name": "system.json"}]}},
+        task_eval={"evaluation": {}}, prompt_text="solve", instance_dir=instance,
+        bundle_dir=bundle, reference_dir=reference,
+        asi_revision="a" * 40, hf_revision="b" * 40,
+    )
+    for root in (staging / "environment" / "inputs", staging / "verifier" / "instance_data"):
+        assert (root / "data" / "system.json").read_text() == '{"system": 1}'
+        assert (root / "data" / "nested" / "extra.json").read_text() == "extra"
+    metadata = json.loads((staging / "verifier" / "instance.json").read_text())
+    assert metadata["requires_instance_data"] is True
+
+
+def test_converter_rejects_missing_declared_data_root(tmp_path, monkeypatch) -> None:
+    """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
+    adapter = _load_adapter()
+    monkeypatch.setattr(adapter, "_render_task_md", lambda **_: "task")
+    monkeypatch.setattr(adapter, "_build_dockerfile", lambda _: "FROM python:3.11\n")
+    monkeypatch.setattr(adapter, "_materialize_evaluator_files", lambda *_: None)
+    instance = tmp_path / "instance"
+    instance.mkdir()
+    reference = instance / "reference"
+    reference.mkdir()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    staging = tmp_path / "task"
+    staging.mkdir()
+    with pytest.raises(ValueError, match="data"):
+        adapter._generate_task_dir(
+            staging=staging, task_id="math.demo", instance_id="math.demo__seed31415",
+            prompt_level="B1", task_meta={"input": {"files": [{"name": "system.json"}]}},
+            task_eval={"evaluation": {}}, prompt_text="solve", instance_dir=instance,
+            bundle_dir=bundle, reference_dir=reference,
+            asi_revision="a" * 40, hf_revision="b" * 40,
+        )
+
+
+def test_evaluator_materializer_rejects_unpinned_source_bytes(tmp_path, monkeypatch) -> None:
+    """Guards the seed31415 P3 source revision mismatch (2026-10-09)."""
+    adapter = _load_adapter()
+    source = tmp_path / "asi"
+    (source / "ai4sci_bench").mkdir(parents=True)
+    (source / "ai4sci_bench" / "core.py").write_text("actual")
+    monkeypatch.setenv("ASI_BENCH_SOURCE", str(source))
+    spec = {
+        "upstream": {"revision": adapter.ASI_REVISION},
+        "files": [{"kind": "copy", "path": "ai4sci_bench/core.py",
+                   "source": "ai4sci_bench/core.py",
+                   "source_sha256": hashlib.sha256(b"expected").hexdigest()}],
+    }
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        adapter._materialize_evaluator_files(spec, tmp_path / "evaluator")
