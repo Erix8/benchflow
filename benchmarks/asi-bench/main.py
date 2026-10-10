@@ -1,8 +1,6 @@
 """Run the ASI-Bench converter CLI.
 
 This remains a thin delegator so ``benchflow.py`` is the single source of truth.
-The converter currently fails closed because this branch contains only the
-integration scaffold.
 """
 
 from __future__ import annotations

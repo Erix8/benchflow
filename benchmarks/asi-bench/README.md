@@ -2,8 +2,9 @@
 
 This adapter converts public ASI-Bench seed31415 instances into native BenchFlow
 tasks. Scores are local and non-official. Seed42, LLM/VLM judge tasks, tasks
-requiring a submission sandbox, and tasks requiring network access are outside
-the current conversion scope.
+requiring a submission sandbox or prebuilt task image, and tasks requiring
+network access are outside the current conversion scope. The total supported
+task count has not yet been enumerated and verified from the pinned source set.
 
 Each generated task contains an agent-visible `environment/inputs/data/` tree
 and a separate verifier-owned `verifier/instance_data/data/` copy. BenchFlow
@@ -48,3 +49,5 @@ use the minimal evaluator environment.
 The current `parity_experiment.json` remains a template. Do not claim scoring
 parity until the same saved agent outputs have been scored by both this
 verifier and `asibench score` and their details have been compared.
+The converter and verifier are implemented; benchmark-wide parity coverage is
+still pending.

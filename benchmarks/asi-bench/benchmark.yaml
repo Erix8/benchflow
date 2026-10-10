@@ -1,15 +1,15 @@
-# Standard BenchFlow descriptor for the planned ASI-Bench adapter.
+# BenchFlow descriptor for the ASI-Bench adapter; parity coverage is pending.
 name: asi-bench
 description: "ASI-Bench scientific-agent tasks converted from pinned public seed31415 material"
 url: https://github.com/apexin-ai/ASI-Bench
 repo: https://github.com/apexin-ai/ASI-Bench
 author: Apexin AI
 converted_by: BenchFlow
-status: scaffold
+status: parity-pending
 
 tasks:
-  count: 0
-  count_note: "Not recorded until the pinned converter materializes and validates the supported task set."
+  count: null
+  count_note: "Supported task count is unknown until the pinned source set is fully materialized and checked."
   task_unit: "ASI task × B1-B4 prompt level × seed31415 instance"
   seed: 31415
   official: false
@@ -18,6 +18,7 @@ tasks:
     - seed42
     - llm-vlm-judge
     - runner-submission-sandbox
+    - runner-task-image
     - network-required-pending-review
 
 conversion:
@@ -26,16 +27,17 @@ conversion:
   source_format: "Pinned ASI-Bench task bundles plus materialized Hugging Face seed31415 instances"
   has_oracle_solutions: false
   source_data_committed: false
-  status: not-implemented
+  status: implemented
 
 verification:
-  method: "planned deterministic ASI-Bench local scorer in the shared task sandbox"
-  reward: "planned normalized ASI-Bench score in [0, 1]"
+  method: "deterministic ASI-Bench local scorer in the shared task sandbox"
+  reward: "normalized ASI-Bench score in [0, 1]"
   reference_agent_visible: false
-  status: not-implemented
+  status: implemented
 
 parity:
   status: insufficient-evidence
+  # These are evidence recorded in parity_experiment.json, which remains a template.
   structural:
     tasks_tested: 0
     passed: 0

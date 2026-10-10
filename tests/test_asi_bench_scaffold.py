@@ -61,15 +61,22 @@ def test_scaffold_has_planned_public_files_and_no_materialized_tasks() -> None:
     )
 
 
-def test_descriptor_and_parity_are_explicitly_incomplete() -> None:
+def test_descriptor_reports_implemented_adapter_and_incomplete_parity() -> None:
+    """Guards P5 descriptor drift after converter and verifier reached AWS P3 parity."""
+    adapter = _load_adapter()
     descriptor = yaml.safe_load((ADAPTER / "benchmark.yaml").read_text())
     assert descriptor["name"] == "asi-bench"
-    assert descriptor["status"] == "scaffold"
+    assert descriptor["status"] == "parity-pending"
+    assert descriptor["tasks"]["count"] is None
     assert descriptor["tasks"]["seed"] == 31415
     assert descriptor["tasks"]["official"] is False
-    assert descriptor["conversion"]["status"] == "not-implemented"
-    assert descriptor["verification"]["status"] == "not-implemented"
+    assert "runner-task-image" in descriptor["tasks"]["excluded"]
+    assert descriptor["conversion"]["status"] == "implemented"
+    assert descriptor["verification"]["status"] == "implemented"
     assert descriptor["parity"]["status"] == "insufficient-evidence"
+
+    manifest = json.loads((ADAPTER / "evaluator_files.json").read_text())
+    assert manifest["upstream"]["revision"] == adapter.ASI_REVISION
 
     parity = json.loads((ADAPTER / "parity_experiment.json").read_text())
     assert parity["status"] == "template"

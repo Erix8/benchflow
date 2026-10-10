@@ -1,6 +1,6 @@
 """Parity entry points for the ASI-Bench to BenchFlow conversion.
 
-No parity claim is valid during the scaffold phase.  Each entry point therefore
+No benchmark-wide parity claim is valid yet. Each entry point therefore
 fails explicitly instead of treating an empty task set as a successful run.
 """
 
