@@ -360,6 +360,34 @@ def _materialize_evaluator_files(ef_spec: dict, evaluator_dir: Path) -> None:
             shutil.copy2(src, dest)
 
 
+def _materialize_task_helpers(
+    ef_spec: dict, task_id: str, bundle_dir: Path, evaluator_dir: Path
+) -> None:
+    """Copy only pinned public helpers needed by this task's custom scorer."""
+    helpers = ef_spec.get("task_helper_files") or {}
+    if not isinstance(helpers, dict):
+        raise ValueError("task_helper_files must be a mapping")
+    entries = helpers.get(task_id, [])
+    if not isinstance(entries, list):
+        raise ValueError(f"task_helper_files[{task_id!r}] must be a list")
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"invalid task helper entry for {task_id}")
+        name = entry.get("path")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\.py", name):
+            raise ValueError(f"unsafe task helper path: {name!r}")
+        source = bundle_dir / name
+        if source.is_symlink() or not source.is_file():
+            raise FileNotFoundError(f"Pinned task helper missing or unsafe: {source}")
+        expected = entry.get("source_sha256")
+        if not isinstance(expected, str) or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+            raise ValueError(f"Task helper SHA-256 mismatch: {task_id}/{name}")
+        destination = evaluator_dir / name
+        if destination.exists() or destination.is_symlink():
+            raise ValueError(f"Task helper would overwrite evaluator file: {name}")
+        shutil.copy2(source, destination)
+
+
 # ── task skip logic ───────────────────────────────────────────────────────────
 
 def _should_skip(task_meta: dict, task_eval: dict | None) -> tuple[bool, str]:
@@ -715,6 +743,7 @@ def _generate_task_dir(
     with ef_path.open(encoding="utf-8") as fh:
         ef_spec = json.load(fh)
     _materialize_evaluator_files(ef_spec, evaluator_dir)
+    _materialize_task_helpers(ef_spec, task_id, bundle_dir, evaluator_dir)
 
     # 6. verifier/reference/
     ref_dst = verifier_dir / "reference"

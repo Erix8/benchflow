@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import yaml
@@ -187,6 +188,8 @@ def test_converter_copies_complete_data_to_agent_and_verifier(tmp_path, monkeypa
     monkeypatch.setattr(adapter, "_render_task_md", lambda **_: "task")
     monkeypatch.setattr(adapter, "_build_dockerfile", lambda _: "FROM python:3.11\n")
     monkeypatch.setattr(adapter, "_materialize_evaluator_files", lambda *_: None)
+    materialize_helpers = Mock(wraps=adapter._materialize_task_helpers)
+    monkeypatch.setattr(adapter, "_materialize_task_helpers", materialize_helpers)
     instance = tmp_path / "instance"
     (instance / "data" / "nested").mkdir(parents=True)
     (instance / "data" / "system.json").write_text('{"system": 1}')
@@ -211,6 +214,10 @@ def test_converter_copies_complete_data_to_agent_and_verifier(tmp_path, monkeypa
         assert (root / "data" / "nested" / "extra.json").read_text() == "extra"
     metadata = json.loads((staging / "verifier" / "instance.json").read_text())
     assert metadata["requires_instance_data"] is True
+    assert materialize_helpers.call_count == 1
+    assert materialize_helpers.call_args.args[1:] == (
+        "math.demo", bundle, staging / "verifier" / "evaluator"
+    )
 
 
 def test_converter_rejects_missing_declared_data_root(tmp_path, monkeypatch) -> None:
@@ -252,3 +259,39 @@ def test_evaluator_materializer_rejects_unpinned_source_bytes(tmp_path, monkeypa
     }
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
         adapter._materialize_evaluator_files(spec, tmp_path / "evaluator")
+
+
+def test_converter_materializes_only_pinned_public_task_helpers(tmp_path) -> None:
+    """Guards the Levin P3 missing-lts_eval_runtime verifier crash (2026-10-10)."""
+    adapter = _load_adapter()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    helper = bundle / "lts_eval_runtime.py"
+    helper.write_text("VALUE = 1\n")
+    expected = hashlib.sha256(helper.read_bytes()).hexdigest()
+    spec = {
+        "task_helper_files": {
+            "math.levin_context_grid_search": [
+                {"path": helper.name, "source_sha256": expected}
+            ]
+        }
+    }
+    evaluator = tmp_path / "evaluator"
+    evaluator.mkdir()
+
+    adapter._materialize_task_helpers(
+        spec, "math.levin_context_grid_search", bundle, evaluator
+    )
+    assert (evaluator / helper.name).read_bytes() == helper.read_bytes()
+    assert sorted(path.name for path in evaluator.iterdir()) == [helper.name]
+
+    with pytest.raises(FileNotFoundError, match="Pinned task helper missing"):
+        adapter._materialize_task_helpers(
+            spec, "math.levin_context_grid_search", tmp_path / "missing", tmp_path / "other"
+        )
+
+    helper.write_text("VALUE = 2\n")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        adapter._materialize_task_helpers(
+            spec, "math.levin_context_grid_search", bundle, tmp_path / "other"
+        )

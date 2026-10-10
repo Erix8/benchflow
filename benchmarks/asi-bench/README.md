@@ -22,7 +22,10 @@ removing the Docker workspace. Their SHA-256 values are recorded in
 
 `benchflow.py` converts instances; `main.py` is its CLI entry point. The
 `evaluator_files.json` source revision must match `ASI_REVISION` in
-`benchflow.py`. Converted tasks must be regenerated after changing the
+`benchflow.py`. The same manifest pins the public helper modules imported by
+task custom scorers; conversion copies only the current task's helpers into
+`verifier/evaluator/` and rejects missing or mismatched bytes. Converted tasks
+must be regenerated after changing the
 converter or verifier template because they contain copied files.
 
 The current `parity_experiment.json` remains a template. Do not claim scoring
