@@ -51,3 +51,18 @@ parity until the same saved agent outputs have been scored by both this
 verifier and `asibench score` and their details have been compared.
 The converter and verifier are implemented; benchmark-wide parity coverage is
 still pending.
+
+To summarize saved BenchFlow jobs, run:
+
+```bash
+python benchmarks/asi-bench/run_asi_bench.py summarize <jobs-dir>
+```
+
+The command prints JSON labeled `seed31415 local, non-official`. It averages
+normalized scores per task and prompt level, and reports the mean across scored
+jobs. A valid zero reward remains in the average. Evaluator failures count in
+`scorer_error_count` and are excluded; jobs without a completed score count in
+`unscored_count` and are never treated as zero. The input directory should
+contain only ASI-Bench job directories; each scored job must include both
+`result.json` and `verifier/reward.json`. The report records source revisions
+and rejects a directory mixing different ASI or HF revisions.
