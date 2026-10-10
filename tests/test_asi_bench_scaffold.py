@@ -157,6 +157,16 @@ def test_task_runtime_is_installed_in_verifier_environment() -> None:
     assert "cvxpy>=1.4" not in ordinary_evaluator_install
 
 
+def test_custom_scorer_dependencies_are_installed_in_verifier_environment() -> None:
+    """Guards the particle B1 pandas verifier failure on AWS (2026-10-10)."""
+    adapter = _load_adapter()
+    meta = {"runtime": {"python": ">=3.10", "packages": ["pandas>=2.0"]}}
+    dockerfile = adapter._build_dockerfile(
+        meta, {"evaluation": {}}, custom_scorer=True
+    )
+    assert "'pandas>=2.0'" in dockerfile.split("# Task runtime packages")[0]
+
+
 def test_convert_all_requires_task_ids_when_no_source_dir(tmp_path: Path) -> None:
     adapter = _load_adapter()
     # Without source_dir AND without task_ids → should raise
@@ -201,7 +211,7 @@ def test_converter_copies_complete_data_to_agent_and_verifier(tmp_path, monkeypa
     """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
     adapter = _load_adapter()
     monkeypatch.setattr(adapter, "_render_task_md", lambda **_: "task")
-    monkeypatch.setattr(adapter, "_build_dockerfile", lambda *_: "FROM python:3.11\n")
+    monkeypatch.setattr(adapter, "_build_dockerfile", lambda *_, **__: "FROM python:3.11\n")
     monkeypatch.setattr(adapter, "_materialize_evaluator_files", lambda *_: None)
     materialize_helpers = Mock(wraps=adapter._materialize_task_helpers)
     monkeypatch.setattr(adapter, "_materialize_task_helpers", materialize_helpers)
@@ -239,7 +249,7 @@ def test_converter_rejects_missing_declared_data_root(tmp_path, monkeypatch) -> 
     """Guards the seed31415 homotopy P3 missing-system.json regression (2026-10-09)."""
     adapter = _load_adapter()
     monkeypatch.setattr(adapter, "_render_task_md", lambda **_: "task")
-    monkeypatch.setattr(adapter, "_build_dockerfile", lambda *_: "FROM python:3.11\n")
+    monkeypatch.setattr(adapter, "_build_dockerfile", lambda *_, **__: "FROM python:3.11\n")
     monkeypatch.setattr(adapter, "_materialize_evaluator_files", lambda *_: None)
     instance = tmp_path / "instance"
     instance.mkdir()

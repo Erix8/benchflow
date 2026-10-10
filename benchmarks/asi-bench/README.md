@@ -31,7 +31,9 @@ converter or verifier template because they contain copied files.
 Tasks declaring `evaluation.runtime: task` install their declared runtime
 packages in the verifier's isolated Python environment as well as the agent
 environment. The verifier passes that prebuilt environment to task scorer
-subprocesses. Other tasks use the minimal evaluator environment.
+subprocesses. Tasks with a `custom_scorer.py` also install their declared
+packages there because custom scorers may import them directly. Other tasks
+use the minimal evaluator environment.
 
 The current `parity_experiment.json` remains a template. Do not claim scoring
 parity until the same saved agent outputs have been scored by both this

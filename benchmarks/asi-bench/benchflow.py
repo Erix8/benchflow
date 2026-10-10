@@ -440,7 +440,9 @@ _SAFE_PKG_RE = re.compile(
 )
 
 
-def _build_dockerfile(task_meta: dict, task_eval: dict | None = None) -> str:
+def _build_dockerfile(
+    task_meta: dict, task_eval: dict | None = None, *, custom_scorer: bool = False
+) -> str:
     runtime = task_meta.get("runtime") or {}
     python_image = _pick_python_image(runtime.get("python"))
     packages: list[str] = list(runtime.get("packages") or [])
@@ -452,7 +454,7 @@ def _build_dockerfile(task_meta: dict, task_eval: dict | None = None) -> str:
     all_pkgs = list(dict.fromkeys(base_pkgs + packages))
     eval_runtime = (task_eval or {}).get("evaluation") or {}
     eval_pkgs = list(dict.fromkeys(base_pkgs + ["scipy"] + (
-        packages if eval_runtime.get("runtime") == "task" else []
+        packages if eval_runtime.get("runtime") == "task" or custom_scorer else []
     )))
 
     lines = [
@@ -699,7 +701,11 @@ def _generate_task_dir(
     env_dir = staging / "environment"
     env_dir.mkdir(parents=True)
     (env_dir / "Dockerfile").write_text(
-        _build_dockerfile(task_meta, task_eval), encoding="utf-8"
+        _build_dockerfile(
+            task_meta, task_eval,
+            custom_scorer=(bundle_dir / "custom_scorer.py").is_file(),
+        ),
+        encoding="utf-8",
     )
 
     # 3. Complete materialized inputs for the agent and an immutable verifier copy.
