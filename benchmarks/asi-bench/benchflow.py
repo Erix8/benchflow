@@ -37,9 +37,9 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # ── pinned revisions ─────────────────────────────────────────────────────────
-# Both must be updated together; converter refuses to run with placeholders.
+# Both must be immutable commit IDs; update the pair when source material changes.
 ASI_REVISION = "f13175a89dc9b4873f6306a3d31e46927c38f1a9"
-HF_REVISION = "main"   # replace with immutable HF dataset commit when available
+HF_REVISION = "0fa14219cafdbab634d8b3cfbce238a8735a214f"
 
 SUPPORTED_SEED = 31415
 PROMPT_LEVELS = ("B1", "B2", "B3", "B4")
@@ -52,6 +52,16 @@ _SKIP_SCORER = {"llm_judge", "multimodal"}
 _SKIP_RUNNER = {"submission_sandbox"}
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def _validate_source_revisions() -> None:
+    """Reject moving source refs before conversion or download can begin."""
+    for name, revision in (
+        ("ASI_REVISION", ASI_REVISION),
+        ("HF_REVISION", HF_REVISION),
+    ):
+        if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+            raise ValueError(f"{name} must be a 40-character commit SHA")
 
 
 # ── public data classes ───────────────────────────────────────────────────────
@@ -565,11 +575,7 @@ def convert(
     """Convert one materialized seed31415 instance into a BenchFlow task directory."""
     validate_instance(source_instance)
 
-    if ASI_REVISION.startswith("REPLACE_WITH_") or HF_REVISION.startswith("REPLACE_WITH_"):
-        raise NotImplementedError(
-            "ASI-Bench converter requires pinned ASI_REVISION and HF_REVISION; "
-            "placeholders are not acceptable"
-        )
+    _validate_source_revisions()
 
     instance_dir = source_instance.instance_dir
     bundle_dir = source_instance.task_bundle_dir
@@ -846,11 +852,7 @@ def convert_all(
     Returns:
         List of generated task directory paths.
     """
-    if ASI_REVISION.startswith("REPLACE_WITH_") or HF_REVISION.startswith("REPLACE_WITH_"):
-        raise NotImplementedError(
-            "ASI-Bench converter requires pinned ASI_REVISION and HF_REVISION; "
-            "placeholders are not acceptable"
-        )
+    _validate_source_revisions()
 
     selected_levels = [lvl.upper() for lvl in (levels or list(PROMPT_LEVELS))]
     for lvl in selected_levels:

@@ -30,6 +30,14 @@ task custom scorers; conversion copies only the current task's helpers into
 must be regenerated after changing the
 converter or verifier template because they contain copied files.
 
+The converter pins ASI-Bench source commit
+`f13175a89dc9b4873f6306a3d31e46927c38f1a9` and Hugging Face seed31415
+dataset commit `0fa14219cafdbab634d8b3cfbce238a8735a214f`. Both revision
+constants must be full commit IDs; branches and tags are rejected before any
+download or task output is written. When either source changes, update both
+pins as needed, refresh `evaluator_files.json` for ASI source changes, and
+regenerate converted tasks before comparing scores.
+
 Tasks declaring `evaluation.runtime: task` install their declared runtime
 packages in the verifier's isolated Python environment as well as the agent
 environment. The verifier passes that prebuilt environment to task scorer

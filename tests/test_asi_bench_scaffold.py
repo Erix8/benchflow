@@ -90,6 +90,7 @@ def test_adapter_declares_only_supported_seed_and_levels() -> None:
     # Revisions are now real pinned values (not placeholder strings)
     assert len(adapter.ASI_REVISION) == 40  # 40-char git SHA
     assert not adapter.ASI_REVISION.startswith("REPLACE_WITH_")
+    assert adapter.HF_REVISION == "0fa14219cafdbab634d8b3cfbce238a8735a214f"
 
     valid = adapter.ASIBenchInstance(
         task_id="demo",
@@ -108,6 +109,25 @@ def test_adapter_declares_only_supported_seed_and_levels() -> None:
         adapter.validate_instance(
             valid.__class__(**{**valid.__dict__, "prompt_level": "B5"})
         )
+
+
+@pytest.mark.parametrize("revision_name", ["ASI_REVISION", "HF_REVISION"])
+@pytest.mark.parametrize("moving_revision", ["main", "refs/heads/main", "v1"])
+def test_converter_rejects_moving_source_revisions_before_writing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    revision_name: str,
+    moving_revision: str,
+) -> None:
+    """Guards the P5 pin to HF commit 0fa14219 after P3 used moving main."""
+    adapter = _load_adapter()
+    monkeypatch.setattr(adapter, revision_name, moving_revision)
+    output = tmp_path / "tasks"
+    with pytest.raises(
+        ValueError, match=f"{revision_name} must be a 40-character commit"
+    ):
+        adapter.convert_all(None, output)
+    assert not output.exists()
 
 
 def test_converter_rejects_seed42_and_bad_level(tmp_path: Path) -> None:
