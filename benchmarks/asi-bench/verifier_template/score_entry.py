@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
+import site
 import stat
 import sys
 import tempfile
@@ -172,6 +174,16 @@ def _bootstrap_evaluator(evaluator_dir: Path) -> None:
         sys.path.insert(0, ev)
 
 
+def _activate_task_runtime(evaluation: dict[str, Any]) -> None:
+    """Let task scorers launch workers using the prebuilt verifier runtime."""
+    if evaluation.get("runtime") != "task":
+        return
+    os.environ["AI4SCI_TASK_RUNTIME_ACTIVE"] = "1"
+    os.environ["AI4SCI_TASK_RUNTIME_PYTHON"] = sys.executable
+    os.environ["AI4SCI_TASK_RUNTIME_BIN"] = str(Path(sys.executable).parent)
+    os.environ["AI4SCI_TRUSTED_SITE_PACKAGES"] = os.pathsep.join(site.getsitepackages())
+
+
 # ── scoring ──────────────────────────────────────────────────────────────────
 
 def _detail_dict(detail: Any) -> dict[str, Any]:
@@ -234,6 +246,7 @@ def _run_scoring(
         task_eval: dict = yaml.safe_load(fh) or {}
 
     evaluation = task_eval.get("evaluation") or {}
+    _activate_task_runtime(evaluation)
 
     # Register scorers
     scorers_pkg = evaluator_dir / "ai4sci_bench" / "scorers"

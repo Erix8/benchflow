@@ -36,6 +36,34 @@ def _load_score_entry() -> object:
     return mod
 
 
+def test_task_scorer_uses_prebuilt_verifier_runtime(monkeypatch) -> None:
+    """Guards the mpsc B1 verifier failure in AWS job 77319f47 (2026-10-10)."""
+    mod = _load_score_entry()
+    names = (
+        "AI4SCI_TASK_RUNTIME_ACTIVE",
+        "AI4SCI_TASK_RUNTIME_PYTHON",
+        "AI4SCI_TASK_RUNTIME_BIN",
+        "AI4SCI_TRUSTED_SITE_PACKAGES",
+    )
+    original = {name: os.environ.get(name) for name in names}
+    for name in names:
+        monkeypatch.delenv(name, raising=False)
+    try:
+        mod._activate_task_runtime({})
+        assert "AI4SCI_TASK_RUNTIME_ACTIVE" not in os.environ
+        mod._activate_task_runtime({"runtime": "task"})
+        assert os.environ["AI4SCI_TASK_RUNTIME_ACTIVE"] == "1"
+        assert os.environ["AI4SCI_TASK_RUNTIME_PYTHON"] == sys.executable
+        assert os.environ["AI4SCI_TASK_RUNTIME_BIN"] == str(Path(sys.executable).parent)
+        assert os.environ["AI4SCI_TRUSTED_SITE_PACKAGES"]
+    finally:
+        for name, value in original.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _make_instance_json(tmp_path: Path, **overrides) -> Path:

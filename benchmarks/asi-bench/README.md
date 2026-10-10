@@ -28,6 +28,11 @@ task custom scorers; conversion copies only the current task's helpers into
 must be regenerated after changing the
 converter or verifier template because they contain copied files.
 
+Tasks declaring `evaluation.runtime: task` install their declared runtime
+packages in the verifier's isolated Python environment as well as the agent
+environment. The verifier passes that prebuilt environment to task scorer
+subprocesses. Other tasks use the minimal evaluator environment.
+
 The current `parity_experiment.json` remains a template. Do not claim scoring
 parity until the same saved agent outputs have been scored by both this
 verifier and `asibench score` and their details have been compared.

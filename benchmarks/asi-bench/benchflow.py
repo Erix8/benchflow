@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import tempfile
 import time
@@ -439,7 +440,7 @@ _SAFE_PKG_RE = re.compile(
 )
 
 
-def _build_dockerfile(task_meta: dict) -> str:
+def _build_dockerfile(task_meta: dict, task_eval: dict | None = None) -> str:
     runtime = task_meta.get("runtime") or {}
     python_image = _pick_python_image(runtime.get("python"))
     packages: list[str] = list(runtime.get("packages") or [])
@@ -449,6 +450,10 @@ def _build_dockerfile(task_meta: dict) -> str:
 
     base_pkgs = ["numpy", "PyYAML", "packaging"]
     all_pkgs = list(dict.fromkeys(base_pkgs + packages))
+    eval_runtime = (task_eval or {}).get("evaluation") or {}
+    eval_pkgs = list(dict.fromkeys(base_pkgs + ["scipy"] + (
+        packages if eval_runtime.get("runtime") == "task" else []
+    )))
 
     lines = [
         f"FROM {python_image}",
@@ -456,12 +461,12 @@ def _build_dockerfile(task_meta: dict) -> str:
         "# Evaluation framework venv (root-owned, not on PATH)",
         "RUN python -m venv /opt/asi-eval && \\",
         "    /opt/asi-eval/bin/pip install --no-cache-dir \\",
-        "        numpy PyYAML packaging scipy",
+        "        " + " ".join(shlex.quote(pkg) for pkg in eval_pkgs),
         "",
         "# Task runtime packages (agent environment)",
     ]
     if all_pkgs:
-        pkgs_joined = " \\\n        ".join(all_pkgs)
+        pkgs_joined = " \\\n        ".join(shlex.quote(pkg) for pkg in all_pkgs)
         lines += [
             "RUN pip install --no-cache-dir \\",
             f"        {pkgs_joined}",
@@ -693,7 +698,9 @@ def _generate_task_dir(
     # 2. environment/Dockerfile
     env_dir = staging / "environment"
     env_dir.mkdir(parents=True)
-    (env_dir / "Dockerfile").write_text(_build_dockerfile(task_meta), encoding="utf-8")
+    (env_dir / "Dockerfile").write_text(
+        _build_dockerfile(task_meta, task_eval), encoding="utf-8"
+    )
 
     # 3. Complete materialized inputs for the agent and an immutable verifier copy.
     # Input names may contain expansion templates, so copying literal declarations
