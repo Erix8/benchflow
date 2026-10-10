@@ -52,6 +52,17 @@ verifier and `asibench score` and their details have been compared.
 The converter and verifier are implemented; benchmark-wide parity coverage is
 still pending.
 
+`bench eval adopt asi-bench --verify` treats the current template as
+`insufficient-evidence`. The opt-in `coverage` block must be complete before
+that command can confirm parity: its source task count must equal the included
+task IDs plus exclusions with reasons, and every included task × required
+prompt level × harness cell must have a completed, nonempty same-artifact
+comparison. Each `agent_parity.results` cell records both rewards, artifact
+SHA-256 values, `same_artifacts: true`, `details_match: true`, and completed
+attempt/evaluation statuses. The current required levels are B1–B4 and the
+harnesses are `opencode` and `pi-acp`. Do not mark coverage complete until the
+full runnable task inventory and saved prediction files have been checked.
+
 To summarize saved BenchFlow jobs, run:
 
 ```bash

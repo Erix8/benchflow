@@ -8,6 +8,14 @@
     "asi_revision": null,
     "hf_revision": null
   },
+  "coverage": {
+    "status": "incomplete",
+    "source_task_count": null,
+    "included_task_ids": [],
+    "excluded_tasks": [],
+    "required_prompt_levels": ["B1", "B2", "B3", "B4"],
+    "required_harnesses": ["opencode", "pi-acp"]
+  },
   "conversion_parity": {
     "description": "ASI-Bench and converted per-criterion verdicts on identical prediction artifacts.",
     "tasks": []

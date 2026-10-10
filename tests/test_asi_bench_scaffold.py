@@ -80,6 +80,11 @@ def test_descriptor_reports_implemented_adapter_and_incomplete_parity() -> None:
 
     parity = json.loads((ADAPTER / "parity_experiment.json").read_text())
     assert parity["status"] == "template"
+    assert parity["coverage"]["status"] == "incomplete"
+    assert parity["coverage"]["source_task_count"] is None
+    assert parity["coverage"]["included_task_ids"] == []
+    assert parity["coverage"]["required_prompt_levels"] == ["B1", "B2", "B3", "B4"]
+    assert parity["coverage"]["required_harnesses"] == ["opencode", "pi-acp"]
     assert parity["scope"] == {
         "seed": 31415,
         "official": False,
