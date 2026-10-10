@@ -8,8 +8,8 @@ converted_by: BenchFlow
 status: parity-pending
 
 tasks:
-  count: null
-  count_note: "46 of 60 pinned source tasks pass metadata filters; supported conversion count remains unverified until materialization."
+  count: 184
+  count_note: "46 of 60 pinned source tasks × B1-B4 converted and structurally checked offline on 2026-10-10; scoring parity remains pending."
   task_unit: "ASI task × B1-B4 prompt level × seed31415 instance"
   seed: 31415
   official: false

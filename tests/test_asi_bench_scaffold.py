@@ -67,7 +67,6 @@ def test_descriptor_reports_implemented_adapter_and_incomplete_parity() -> None:
     descriptor = yaml.safe_load((ADAPTER / "benchmark.yaml").read_text())
     assert descriptor["name"] == "asi-bench"
     assert descriptor["status"] == "parity-pending"
-    assert descriptor["tasks"]["count"] is None
     assert descriptor["tasks"]["seed"] == 31415
     assert descriptor["tasks"]["official"] is False
     assert "runner-task-image" in descriptor["tasks"]["excluded"]
@@ -79,6 +78,10 @@ def test_descriptor_reports_implemented_adapter_and_incomplete_parity() -> None:
     assert manifest["upstream"]["revision"] == adapter.ASI_REVISION
 
     parity = json.loads((ADAPTER / "parity_experiment.json").read_text())
+    assert descriptor["tasks"]["count"] == (
+        len(parity["coverage"]["included_task_ids"])
+        * len(parity["coverage"]["required_prompt_levels"])
+    )
     assert parity["status"] == "template"
     assert parity["coverage"]["status"] == "incomplete"
     assert parity["coverage"]["source_task_count"] == 60
@@ -204,6 +207,75 @@ def test_convert_all_requires_task_ids_when_no_source_dir(tmp_path: Path) -> Non
     # Without source_dir AND without task_ids → should raise
     with pytest.raises((ValueError, TypeError)):
         adapter.convert_all(None, tmp_path / "out")
+
+
+def test_download_retries_after_partial_instance(tmp_path, monkeypatch) -> None:
+    """Guards the c13683ca downloader against the P5 partial-Levin retry failure."""
+    adapter = _load_adapter()
+    calls = []
+
+    def download_instance(task_id, destination, revision, cache_dir):
+        calls.append(task_id)
+        (destination / "prompt_b1.md").write_text("partial")
+        if len(calls) == 1:
+            raise RuntimeError("download interrupted")
+        for level in (2, 3, 4):
+            (destination / f"prompt_b{level}.md").write_text("ready")
+        (destination / "reference").mkdir()
+        (destination / "reference" / "answer.json").write_text("{}")
+        return revision
+
+    def download_bundle(task_id, destination, revision):
+        (destination / "task_meta.yaml").write_text("id: math.demo\n")
+        (destination / "task_eval.yaml").write_text("evaluation: {}\n")
+        return revision
+
+    monkeypatch.setattr(adapter, "_download_instance", download_instance)
+    monkeypatch.setattr(adapter, "_download_task_bundle", download_bundle)
+    root = tmp_path / "downloads"
+
+    with pytest.raises(RuntimeError, match="download interrupted"):
+        adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+    assert not (root / "instance" / "math.demo__seed31415").exists()
+    adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+    adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+
+    instance = root / "instance" / "math.demo__seed31415"
+    assert len(calls) == 2
+    assert all((instance / f"prompt_b{level}.md").is_file() for level in (1, 2, 3, 4))
+
+
+def test_download_retries_after_partial_task_bundle(tmp_path, monkeypatch) -> None:
+    """Guards the c13683ca downloader against the P5 partial-bundle retry failure."""
+    adapter = _load_adapter()
+    bundle_calls = []
+
+    def download_instance(task_id, destination, revision, cache_dir):
+        for level in (1, 2, 3, 4):
+            (destination / f"prompt_b{level}.md").write_text("ready")
+        return revision
+
+    def download_bundle(task_id, destination, revision):
+        bundle_calls.append(task_id)
+        (destination / "task_meta.yaml").write_text("partial")
+        if len(bundle_calls) == 1:
+            raise RuntimeError("rate limit exceeded")
+        (destination / "task_eval.yaml").write_text("evaluation: {}\n")
+        return revision
+
+    monkeypatch.setattr(adapter, "_download_instance", download_instance)
+    monkeypatch.setattr(adapter, "_download_task_bundle", download_bundle)
+    root = tmp_path / "downloads"
+
+    with pytest.raises(RuntimeError, match="rate limit exceeded"):
+        adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+    assert not (root / "task_bundle" / "tasks" / "math" / "demo").exists()
+    adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+    adapter._download_task_assets("math.demo", root, "a" * 40, "b" * 40, None)
+
+    bundle = root / "task_bundle" / "tasks" / "math" / "demo"
+    assert len(bundle_calls) == 2
+    assert (bundle / "task_eval.yaml").is_file()
 
 
 def test_verifier_exits_nonzero_without_instance_json(tmp_path: Path) -> None:

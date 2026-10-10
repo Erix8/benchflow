@@ -27,6 +27,7 @@ import shlex
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -992,15 +993,63 @@ def _download_task_assets(
     instance_dir = download_root / "instance" / instance_id
     bundle_dir = download_root / "task_bundle" / "tasks" / domain / name
 
-    if not instance_dir.is_dir():
-        logger.info("Downloading HF instance: %s", task_id)
-        instance_dir.mkdir(parents=True, exist_ok=True)
-        _download_instance(task_id, instance_dir, hf_revision, hf_cache_dir)
+    _download_pinned_directory(
+        instance_dir,
+        hf_revision,
+        lambda staging: _download_instance(task_id, staging, hf_revision, hf_cache_dir),
+        required_files=tuple(f"prompt_b{level}.md" for level in range(1, 5)),
+    )
+    _download_pinned_directory(
+        bundle_dir,
+        asi_revision,
+        lambda staging: _download_task_bundle(task_id, staging, asi_revision),
+        required_files=("task_meta.yaml", "task_eval.yaml"),
+    )
 
-    if not bundle_dir.is_dir():
-        logger.info("Downloading GitHub task bundle: %s", task_id)
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-        _download_task_bundle(task_id, bundle_dir, asi_revision)
+
+def _download_pinned_directory(
+    destination: Path,
+    revision: str,
+    download: Callable[[Path], str],
+    *,
+    required_files: tuple[str, ...],
+) -> None:
+    """Publish only a complete download; never reuse a partial cache directory."""
+    if destination.is_symlink():
+        raise ValueError(f"Download destination is a symlink: {destination}")
+    marker = destination / ".asibench-download-complete.json"
+    if destination.is_dir() and marker.is_file():
+        try:
+            complete = json.loads(marker.read_text()) == {"revision": revision}
+        except (OSError, ValueError):
+            complete = False
+        if complete and all((destination / name).is_file() for name in required_files):
+            return
+
+    logger.info("Downloading pinned assets: %s", destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent)
+    )
+    try:
+        actual_revision = download(staging)
+        if actual_revision != revision:
+            raise ValueError(
+                f"Downloaded revision mismatch: expected {revision}, got {actual_revision}"
+            )
+        if not all((staging / name).is_file() for name in required_files):
+            raise ValueError(f"Download missing required files: {destination}")
+        (staging / marker.name).write_text(json.dumps({"revision": revision}) + "\n")
+        if destination.exists():
+            if not destination.is_dir() or destination.is_symlink():
+                raise ValueError(
+                    f"Download destination is not a directory: {destination}"
+                )
+            shutil.rmtree(destination)
+        staging.rename(destination)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 # ── CLI helpers ───────────────────────────────────────────────────────────────

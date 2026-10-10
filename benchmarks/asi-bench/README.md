@@ -8,9 +8,10 @@ contains 60 formal tasks, each with a matching directory in the pinned HF
 seed31415 dataset. The converter's metadata rules identify 46 candidates and
 exclude 14: four require network access, nine use a multimodal scorer, and one
 uses an LLM judge. The exact IDs and reasons are recorded in
-`parity_experiment.json`. HF file metadata shows all 46 candidates have B1–B4
-prompts, `instance_meta.json`, and reference files. This is a source inventory,
-not a claim that all 46 have been materialized, converted, or scored.
+`parity_experiment.json`. All 46 candidates were materialized at B1–B4 from
+the pinned sources, producing 184 task directories. All 184 passed BenchFlow's
+structural task check on 2026-10-10. This checks conversion output, not scoring
+parity or agent execution.
 
 Each generated task contains an agent-visible `environment/inputs/data/` tree
 and a separate verifier-owned `verifier/instance_data/data/` copy. BenchFlow
@@ -36,6 +37,16 @@ task custom scorers; conversion copies only the current task's helpers into
 `verifier/evaluator/` and rejects missing or mismatched bytes. Converted tasks
 must be regenerated after changing the
 converter or verifier template because they contain copied files.
+
+Direct downloads publish cached HF instances and GitHub task bundles only after
+the pinned download completes. Interrupted or legacy partial cache directories
+are downloaded again. If GitHub API access is rate limited, use a complete
+pinned local source with `--source-dir` and set `ASI_BENCH_SOURCE` to its root.
+
+Run converter contract tests with
+`PYTHONPATH=src .venv/bin/python -m pytest tests/test_asi_bench_scaffold.py -q`.
+The download retry tests cover interrupted HF instances and GitHub task bundles;
+they do not make network requests.
 
 The converter pins ASI-Bench source commit
 `f13175a89dc9b4873f6306a3d31e46927c38f1a9` and Hugging Face seed31415
