@@ -9,6 +9,8 @@ Each generated task contains an agent-visible `environment/inputs/data/` tree
 and a separate verifier-owned `verifier/instance_data/data/` copy. BenchFlow
 uploads `verifier/` only after the agent attempt. The verifier scores declared
 prediction files against this immutable input and `verifier/reference/`.
+It also places the same immutable input at `verifier/data/` for ASI custom
+scorers that read `reference/` and `data/` as sibling directories.
 Missing predictions are ordinary submission failures; missing or unsafe
 verifier inputs produce `asi_error.json`, no reward, and a nonzero exit.
 

@@ -234,7 +234,11 @@ def test_converter_copies_complete_data_to_agent_and_verifier(tmp_path, monkeypa
         bundle_dir=bundle, reference_dir=reference,
         asi_revision="a" * 40, hf_revision="b" * 40,
     )
-    for root in (staging / "environment" / "inputs", staging / "verifier" / "instance_data"):
+    for root in (
+        staging / "environment" / "inputs",
+        staging / "verifier" / "instance_data",
+        staging / "verifier",
+    ):
         assert (root / "data" / "system.json").read_text() == '{"system": 1}'
         assert (root / "data" / "nested" / "extra.json").read_text() == "extra"
     metadata = json.loads((staging / "verifier" / "instance.json").read_text())

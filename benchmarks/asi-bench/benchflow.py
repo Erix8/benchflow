@@ -725,6 +725,9 @@ def _generate_task_dir(
     verifier_dir.mkdir()
     if instance_data.exists() or instance_data.is_symlink():
         _copy_instance_data(instance_data, verifier_dir / "instance_data" / "data")
+        # ASI custom scorers may read inputs beside reference/ via
+        # ref_dir.parent / "data", in addition to the staged prediction data/.
+        _copy_instance_data(instance_data, verifier_dir / "data")
     verifier_template_dir = _SCRIPT_DIR / "verifier_template"
     for tmpl in ("test.sh", "score_entry.py"):
         src = verifier_template_dir / tmpl
