@@ -70,6 +70,23 @@ def test_shipped_asi_template_is_insufficient() -> None:
     assert build_verify_report("asi-bench", data).verdict == "insufficient-evidence"
 
 
+def test_pinned_asi_source_inventory_is_accounted_for() -> None:
+    """Guards ASI source commit f13175a against silent task loss."""
+    data = json.loads(PARITY.read_text())
+    coverage = data["coverage"]
+    included = coverage["included_task_ids"]
+    excluded = coverage["excluded_tasks"]
+    assert coverage["source_task_count"] == 60
+    assert len(included) == 46
+    assert len(excluded) == 14
+    assert len(set(included)) == len(included)
+    assert len({item["task_id"] for item in excluded}) == len(excluded)
+    assert not set(included) & {item["task_id"] for item in excluded}
+    assert all(item["reason"] for item in excluded)
+    assert data["scope"]["asi_revision"] == "f13175a89dc9b4873f6306a3d31e46927c38f1a9"
+    assert data["scope"]["hf_revision"] == "0fa14219cafdbab634d8b3cfbce238a8735a214f"
+
+
 def test_template_stays_insufficient_with_partial_matching_samples() -> None:
     data = _complete_record()
     data["status"] = "template"

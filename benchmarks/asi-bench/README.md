@@ -3,8 +3,14 @@
 This adapter converts public ASI-Bench seed31415 instances into native BenchFlow
 tasks. Scores are local and non-official. Seed42, LLM/VLM judge tasks, tasks
 requiring a submission sandbox or prebuilt task image, and tasks requiring
-network access are outside the current conversion scope. The total supported
-task count has not yet been enumerated and verified from the pinned source set.
+network access are outside the current conversion scope. The pinned ASI source
+contains 60 formal tasks, each with a matching directory in the pinned HF
+seed31415 dataset. The converter's metadata rules identify 46 candidates and
+exclude 14: four require network access, nine use a multimodal scorer, and one
+uses an LLM judge. The exact IDs and reasons are recorded in
+`parity_experiment.json`. HF file metadata shows all 46 candidates have B1–B4
+prompts, `instance_meta.json`, and reference files. This is a source inventory,
+not a claim that all 46 have been materialized, converted, or scored.
 
 Each generated task contains an agent-visible `environment/inputs/data/` tree
 and a separate verifier-owned `verifier/instance_data/data/` copy. BenchFlow

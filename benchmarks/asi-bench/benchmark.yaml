@@ -9,7 +9,7 @@ status: parity-pending
 
 tasks:
   count: null
-  count_note: "Supported task count is unknown until the pinned source set is fully materialized and checked."
+  count_note: "46 of 60 pinned source tasks pass metadata filters; supported conversion count remains unverified until materialization."
   task_unit: "ASI task × B1-B4 prompt level × seed31415 instance"
   seed: 31415
   official: false
